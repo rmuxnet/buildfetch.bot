@@ -1,0 +1,12 @@
+{
+  "vermeer": {
+    "device_name": "POCO F6 PRO",
+    "maintainer": "yep",
+    "support_group": "yep"
+  },
+  "peridot": {
+    "device_name": "POCO F6",
+    "maintainer": "yep",
+    "support_group": "meow"
+  }
+}
