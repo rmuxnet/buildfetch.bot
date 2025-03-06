@@ -183,7 +183,7 @@ async function sendStart(chatId) {
 async function sendHelp(chatId) {
   addLog(`Sending help message to ${chatId}`);
   return sendMessage(chatId,
-    "ðŸ“± *Axion Build Checker Commands:*\n\n" +
+    "📱 *Axion Build Checker Commands:*\n\n" +
     "/start - Start the bot\n" +
     "/axion <codename> - Check builds for a specific device\n" +
     "/devices - List all officially supported devices\n" +
@@ -212,7 +212,7 @@ async function handleAxionCommand(chatId, codename) {
       
       let message = `Device "${codename}" not found in official devices list.`;
       if (similarCodenames.length > 0) {
-        message += `\n\nDid you mean:\n${similarCodenames.map(c => `â€¢ ${c} (${devices[c]})`).join('\n')}`;
+        message += `\n\nDid you mean:\n${similarCodenames.map(c => `• ${c} (${devices[c]})`).join('\n')}`;
       }
       
       addLog(`Device ${codename} not found, suggesting ${similarCodenames.join(', ')}`);
@@ -233,17 +233,17 @@ async function handleAxionCommand(chatId, codename) {
     const maintainer = maintainers[codename] || 'Not specified';
     const keyboard = [];
     
-    let message = `ðŸ“± *${deviceName}* (${codename})\n`;
-    if (maintainer) message += `ðŸ‘¤ Maintainer: ${maintainer}\n\n`;
+    let message = `📱 *${deviceName}* (${codename})\n`;
+    if (maintainer) message += `👤 Maintainer: ${maintainer}\n\n`;
     message += "*Available builds:*\n";
 
     if (vanillaData) {
       keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${codename}` }]);
-      message += `\nâ€¢ Vanilla: ${vanillaData.version}`;
+      message += `\n• Vanilla: ${vanillaData.version}`;
     }
     if (gmsData) {
       keyboard.push([{ text: "GMS", callback_data: `gms_${codename}` }]);
-      message += `\nâ€¢ GMS: ${gmsData.version}`;
+      message += `\n• GMS: ${gmsData.version}`;
     }
 
     addLog(`Sending build info for ${codename} (${deviceName}) to ${chatId}`);
@@ -282,12 +282,12 @@ async function handleDevicesCommand(chatId) {
     }
     
     // Create message with manufacturers and devices
-    let message = "ðŸ“± *Officially Supported Devices*\n\n";
+    let message = "📱 *Officially Supported Devices*\n\n";
     
     for (const [manufacturer, deviceList] of Object.entries(manufacturers)) {
       message += `*${manufacturer}*\n`;
       for (const device of deviceList) {
-        message += `â€¢ ${device.name} (\`${device.codename}\`)\n`;
+        message += `• ${device.name} (\`${device.codename}\`)\n`;
       }
       message += '\n';
     }
@@ -351,17 +351,17 @@ async function handleBackButton(query, codename) {
     const maintainer = maintainers[codename] || 'Not specified';
     const keyboard = [];
     
-    let message = `ðŸ“± *${deviceName}* (${codename})\n`;
-    if (maintainer) message += `ðŸ‘¤ Maintainer: ${maintainer}\n\n`;
+    let message = `📱 *${deviceName}* (${codename})\n`;
+    if (maintainer) message += `👤 Maintainer: ${maintainer}\n\n`;
     message += "*Available builds:*\n";
 
     if (vanillaData) {
       keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${codename}` }]);
-      message += `\nâ€¢ Vanilla: ${vanillaData.version}`;
+      message += `\n• Vanilla: ${vanillaData.version}`;
     }
     if (gmsData) {
       keyboard.push([{ text: "GMS", callback_data: `gms_${codename}` }]);
-      message += `\nâ€¢ GMS: ${gmsData.version}`;
+      message += `\n• GMS: ${gmsData.version}`;
     }
 
     return editMessage(query, message, {
@@ -390,28 +390,28 @@ async function handleBuildDetails(query, variant, codename) {
     const supportGroup = supportGroups[codename] || null;
     
     const message = 
-      `âš¡ *${variant.toUpperCase()} Build*\n` +
-      `ðŸ“± Device: ${deviceName} (${codename})\n` +
-      `ðŸ‘¤ Maintainer: ${maintainer}\n\n` +
-      `ðŸ”– Version: ${buildData.version}\n` +
-      `ðŸ“… Date: ${buildData.date}\n` +
-      `ðŸ“¦ Size: ${buildData.size}`;
+      `⚡ *${variant.toUpperCase()} Build*\n` +
+      `📱 Device: ${deviceName} (${codename})\n` +
+      `👤 Maintainer: ${maintainer}\n\n` +
+      `🔖 Version: ${buildData.version}\n` +
+      `📅 Date: ${buildData.date}\n` +
+      `📦 Size: ${buildData.size}`;
 
     const keyboard = [
-      [{ text: "â¬‡ï¸ Download", url: buildData.url }]
+      [{ text: "⬇️ Download", url: buildData.url }]
     ];
     
     // Add Support Group button if available
     if (supportGroup) {
-      keyboard.unshift([{ text: "ðŸ’¬ Support Group", url: supportGroup }]);
+      keyboard.unshift([{ text: "💬 Support Group", url: supportGroup }]);
     }
     
     // Add MD5 button if available
     if (buildData.md5) {
-      keyboard.push([{ text: "ðŸ“‹ MD5: " + buildData.md5.substring(0, 16) + "...", callback_data: "md5_copy" }]);
+      keyboard.push([{ text: "📋 MD5: " + buildData.md5.substring(0, 16) + "...", callback_data: "md5_copy" }]);
     }
     
-    keyboard.push([{ text: "ðŸ”™ Back", callback_data: `back_${codename}` }]);
+    keyboard.push([{ text: "🔙 Back", callback_data: `back_${codename}` }]);
 
     addLog(`Sending ${variant} build details for ${codename}`);
     return editMessage(query, message, {
