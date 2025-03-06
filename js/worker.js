@@ -7,6 +7,7 @@ const CACHE_TTL = 60; // Cache for 1 min
 // In-memory cache
 let devicesCache = null;
 let maintainersCache = null;
+let supportGroupsCache = null;
 let devicesCacheTime = 0;
 let buildDataCache = {};
 let logMessages = []; // Store log messages
@@ -182,7 +183,7 @@ async function sendStart(chatId) {
 async function sendHelp(chatId) {
   addLog(`Sending help message to ${chatId}`);
   return sendMessage(chatId,
-    "📱 *Axion Build Checker Commands:*\n\n" +
+    "ðŸ“± *Axion Build Checker Commands:*\n\n" +
     "/start - Start the bot\n" +
     "/axion <codename> - Check builds for a specific device\n" +
     "/devices - List all officially supported devices\n" +
@@ -200,7 +201,7 @@ async function handleAxionCommand(chatId, codename) {
   addLog(`Checking builds for ${codename} requested by ${chatId}`);
   
   try {
-    const [devices, maintainers] = await fetchDevicesAndMaintainers();
+    const [devices, maintainers, supportGroups] = await fetchDevicesData();
     
     // Check if device exists in official list
     if (!devices[codename]) {
@@ -211,7 +212,7 @@ async function handleAxionCommand(chatId, codename) {
       
       let message = `Device "${codename}" not found in official devices list.`;
       if (similarCodenames.length > 0) {
-        message += `\n\nDid you mean:\n${similarCodenames.map(c => `• ${c} (${devices[c]})`).join('\n')}`;
+        message += `\n\nDid you mean:\n${similarCodenames.map(c => `â€¢ ${c} (${devices[c]})`).join('\n')}`;
       }
       
       addLog(`Device ${codename} not found, suggesting ${similarCodenames.join(', ')}`);
@@ -232,17 +233,17 @@ async function handleAxionCommand(chatId, codename) {
     const maintainer = maintainers[codename] || 'Not specified';
     const keyboard = [];
     
-    let message = `📱 *${deviceName}* (${codename})\n`;
-    if (maintainer) message += `👤 Maintainer: ${maintainer}\n\n`;
+    let message = `ðŸ“± *${deviceName}* (${codename})\n`;
+    if (maintainer) message += `ðŸ‘¤ Maintainer: ${maintainer}\n\n`;
     message += "*Available builds:*\n";
 
     if (vanillaData) {
       keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${codename}` }]);
-      message += `\n• Vanilla: ${vanillaData.version}`;
+      message += `\nâ€¢ Vanilla: ${vanillaData.version}`;
     }
     if (gmsData) {
       keyboard.push([{ text: "GMS", callback_data: `gms_${codename}` }]);
-      message += `\n• GMS: ${gmsData.version}`;
+      message += `\nâ€¢ GMS: ${gmsData.version}`;
     }
 
     addLog(`Sending build info for ${codename} (${deviceName}) to ${chatId}`);
@@ -259,7 +260,7 @@ async function handleAxionCommand(chatId, codename) {
 async function handleDevicesCommand(chatId) {
   addLog(`Devices command requested by ${chatId}`);
   try {
-    const [devices, maintainers] = await fetchDevicesAndMaintainers();
+    const [devices, maintainers] = await fetchDevicesData();
     
     if (Object.keys(devices).length === 0) {
       addLog('No devices found in the repository');
@@ -281,12 +282,12 @@ async function handleDevicesCommand(chatId) {
     }
     
     // Create message with manufacturers and devices
-    let message = "📱 *Officially Supported Devices*\n\n";
+    let message = "ðŸ“± *Officially Supported Devices*\n\n";
     
     for (const [manufacturer, deviceList] of Object.entries(manufacturers)) {
       message += `*${manufacturer}*\n`;
       for (const device of deviceList) {
-        message += `• ${device.name} (\`${device.codename}\`)\n`;
+        message += `â€¢ ${device.name} (\`${device.codename}\`)\n`;
       }
       message += '\n';
     }
@@ -340,7 +341,7 @@ async function handleDevicesCommand(chatId) {
 async function handleBackButton(query, codename) {
   addLog(`Back button pressed for ${codename}`);
   try {
-    const [devices, maintainers] = await fetchDevicesAndMaintainers();
+    const [devices, maintainers] = await fetchDevicesData();
     const [vanillaData, gmsData] = await Promise.all([
       fetchBuildData(codename, 'VANILLA'),
       fetchBuildData(codename, 'GMS')
@@ -350,17 +351,17 @@ async function handleBackButton(query, codename) {
     const maintainer = maintainers[codename] || 'Not specified';
     const keyboard = [];
     
-    let message = `📱 *${deviceName}* (${codename})\n`;
-    if (maintainer) message += `👤 Maintainer: ${maintainer}\n\n`;
+    let message = `ðŸ“± *${deviceName}* (${codename})\n`;
+    if (maintainer) message += `ðŸ‘¤ Maintainer: ${maintainer}\n\n`;
     message += "*Available builds:*\n";
 
     if (vanillaData) {
       keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${codename}` }]);
-      message += `\n• Vanilla: ${vanillaData.version}`;
+      message += `\nâ€¢ Vanilla: ${vanillaData.version}`;
     }
     if (gmsData) {
       keyboard.push([{ text: "GMS", callback_data: `gms_${codename}` }]);
-      message += `\n• GMS: ${gmsData.version}`;
+      message += `\nâ€¢ GMS: ${gmsData.version}`;
     }
 
     return editMessage(query, message, {
@@ -376,7 +377,7 @@ async function handleBackButton(query, codename) {
 async function handleBuildDetails(query, variant, codename) {
   addLog(`Build details requested for ${codename} (${variant})`);
   try {
-    const [devices, maintainers] = await fetchDevicesAndMaintainers();
+    const [devices, maintainers, supportGroups] = await fetchDevicesData();
     const buildData = await fetchBuildData(codename, variant.toUpperCase());
     
     if (!buildData) {
@@ -386,25 +387,31 @@ async function handleBuildDetails(query, variant, codename) {
 
     const deviceName = devices[codename];
     const maintainer = maintainers[codename] || 'Not specified';
+    const supportGroup = supportGroups[codename] || null;
     
     const message = 
-      `⚡ *${variant.toUpperCase()} Build*\n` +
-      `📱 Device: ${deviceName} (${codename})\n` +
-      `👤 Maintainer: ${maintainer}\n\n` +
-      `🔖 Version: ${buildData.version}\n` +
-      `📅 Date: ${buildData.date}\n` +
-      `📦 Size: ${buildData.size}`;
+      `âš¡ *${variant.toUpperCase()} Build*\n` +
+      `ðŸ“± Device: ${deviceName} (${codename})\n` +
+      `ðŸ‘¤ Maintainer: ${maintainer}\n\n` +
+      `ðŸ”– Version: ${buildData.version}\n` +
+      `ðŸ“… Date: ${buildData.date}\n` +
+      `ðŸ“¦ Size: ${buildData.size}`;
 
     const keyboard = [
-      [{ text: "⬇️ Download", url: buildData.url }]
+      [{ text: "â¬‡ï¸ Download", url: buildData.url }]
     ];
+    
+    // Add Support Group button if available
+    if (supportGroup) {
+      keyboard.unshift([{ text: "ðŸ’¬ Support Group", url: supportGroup }]);
+    }
     
     // Add MD5 button if available
     if (buildData.md5) {
-      keyboard.push([{ text: "📋 MD5: " + buildData.md5.substring(0, 16) + "...", callback_data: "md5_copy" }]);
+      keyboard.push([{ text: "ðŸ“‹ MD5: " + buildData.md5.substring(0, 16) + "...", callback_data: "md5_copy" }]);
     }
     
-    keyboard.push([{ text: "🔙 Back", callback_data: `back_${codename}` }]);
+    keyboard.push([{ text: "ðŸ”™ Back", callback_data: `back_${codename}` }]);
 
     addLog(`Sending ${variant} build details for ${codename}`);
     return editMessage(query, message, {
@@ -417,14 +424,14 @@ async function handleBuildDetails(query, variant, codename) {
   }
 }
 
-async function fetchDevicesAndMaintainers() {
+async function fetchDevicesData() {
   // Check cache first
   const now = Date.now();
-  if (devicesCache && maintainersCache && (now - devicesCacheTime < CACHE_TTL * 1000)) {
-    return [devicesCache, maintainersCache];
+  if (devicesCache && maintainersCache && supportGroupsCache && (now - devicesCacheTime < CACHE_TTL * 1000)) {
+    return [devicesCache, maintainersCache, supportGroupsCache];
   }
   
-  addLog("Fetching devices and maintainers from GitHub");
+  addLog("Fetching devices data from GitHub");
   
   try {
     const response = await fetch(DEVICES_URL, {
@@ -438,9 +445,10 @@ async function fetchDevicesAndMaintainers() {
     // Parse JSON data
     const devicesData = await response.json();
 
-    // Create devices and maintainers maps
+    // Create devices, maintainers and support groups maps
     const devices = {};
     const maintainers = {};
+    const supportGroups = {};
     
     // Iterate through each device entry in the JSON
     for (const [codename, info] of Object.entries(devicesData)) {
@@ -449,6 +457,11 @@ async function fetchDevicesAndMaintainers() {
       
       // Store maintainer info with codename as key
       maintainers[codename] = info.maintainer;
+      
+      // Store support group with codename as key (if available)
+      if (info.support_group) {
+        supportGroups[codename] = info.support_group;
+      }
       
       // Log each device and its codename
       addLog(`${codename}: ${info.device_name}`);
@@ -459,13 +472,14 @@ async function fetchDevicesAndMaintainers() {
     // Update cache
     devicesCache = devices;
     maintainersCache = maintainers;
+    supportGroupsCache = supportGroups;
     devicesCacheTime = now;
     
-    return [devices, maintainers];
+    return [devices, maintainers, supportGroups];
   } catch (error) {
     addLog(`Error fetching devices: ${error}`);
     // Return empty objects if fetch fails but don't update cache
-    return [{}, {}];
+    return [{}, {}, {}];
   }
 }
 
