@@ -1,12 +1,152 @@
 {
-  "vermeer": {
-    "device_name": "POCO F6 PRO",
-    "maintainer": "yep",
-    "support_group": "yep"
+  "oriole": {
+    "device_name": "Google Pixel 6",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/oriole_support"
+  },
+  "bluejay": {
+    "device_name": "Google Pixel 6a",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/bluejay_support"
+  },
+  "raven": {
+    "device_name": "Google Pixel 6 Pro",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/raven_support"
+  },
+  "lynx": {
+    "device_name": "Google Pixel 7a",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/lynx_support"
+  },
+  "panther": {
+    "device_name": "Google Pixel 7",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/panther_support"
+  },
+  "cheetah": {
+    "device_name": "Google Pixel 7 Pro",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/cheetah_support"
+  },
+  "akita": {
+    "device_name": "Google Pixel 8a",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/akita_support"
+  },
+  "shiba": {
+    "device_name": "Google Pixel 8",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/shiba_support"
+  },
+  "husky": {
+    "device_name": "Google Pixel 8 Pro",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/husky_support"
+  },
+  "tokay": {
+    "device_name": "Google Pixel 9",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/tokay_support"
+  },
+  "caiman": {
+    "device_name": "Google Pixel 9 Pro",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/caiman_support"
+  },
+  "komodo": {
+    "device_name": "Google Pixel 9 Pro XL",
+    "maintainer": "rmp22",
+    "support_group": "https://t.me/komodo_support"
+  },
+  "a71": {
+    "device_name": "Galaxy A71 4G",
+    "maintainer": "rmux",
+    "support_group": "https://t.me/a71_support"
+  },
+  "cancunf": {
+    "device_name": "Motorola G54",
+    "maintainer": "Ayan",
+    "support_group": "https://t.me/cancunf_support"
+  },
+  "beryllium": {
+    "device_name": "POCO F1",
+    "maintainer": "Rve",
+    "support_group": "https://t.me/beryllium_support"
+  },
+  "alioth": {
+    "device_name": "POCO F3/Mi 11X",
+    "maintainer": "donjohanliebert",
+    "support_group": "https://t.me/alioth_support"
+  },
+  "marble": {
+    "device_name": "POCO F5",
+    "maintainer": "Pabloescobar",
+    "support_group": "https://t.me/marble_support"
   },
   "peridot": {
     "device_name": "POCO F6",
-    "maintainer": "yep",
-    "support_group": "meow"
+    "maintainer": "Drenzzz.",
+    "support_group": "https://t.me/peridot_support"
+  },
+  "vermeer": {
+    "device_name": "POCO F6 PRO",
+    "maintainer": "Lunark",
+    "support_group": "https://t.me/vermeer_support"
+  },
+  "vayu": {
+    "device_name": "POCO X3 PRO",
+    "maintainer": "Ste",
+    "support_group": "https://t.me/vayu_support"
+  },
+  "veux": {
+    "device_name": "POCO X4 PRO 5G",
+    "maintainer": "amritokun",
+    "support_group": "https://t.me/veux_support"
+  },
+  "duchamp": {
+    "device_name": "POCO X6 Pro 5G",
+    "maintainer": "zenin1504",
+    "support_group": "https://t.me/duchamp_support"
+  },
+  "r5x": {
+    "device_name": "Realme 5 series",
+    "maintainer": "Amritorock",
+    "support_group": "https://t.me/r5x_support"
+  },
+  "bitra": {
+    "device_name": "Realme GT Neo 2",
+    "maintainer": "XXBADRGXX",
+    "support_group": "https://t.me/bitra_support"
+  },
+  "begonia": {
+    "device_name": "Redmi Note 8 Pro",
+    "maintainer": "Saikrishna",
+    "support_group": "https://t.me/begonia_support"
+  },
+  "sweet": {
+    "device_name": "Redmi Note 10 Pro",
+    "maintainer": "donjohanliebert",
+    "support_group": "https://t.me/sweet_support"
+  },
+  "socrates": {
+    "device_name": "Redmi K60 Pro",
+    "maintainer": "donjohanliebert",
+    "support_group": "https://t.me/socrates_support"
+  },
+  "LG8n": {
+    "device_name": "TECNO POVA 4 Pro",
+    "maintainer": "Shirayuki39",
+    "support_group": "https://t.me/LG8n_support"
+  },
+  "LG7n": {
+    "device_name": "TECNO POVA 4",
+    "maintainer": "Shirayuki39",
+    "support_group": "https://t.me/LG7n_support"
+  },
+  "pipa": {
+    "device_name": "Xiaomi Pad 6",
+    "maintainer": "Ste",
+    "support_group": "https://t.me/pipa_support"
   }
 }
