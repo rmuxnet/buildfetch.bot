@@ -203,11 +203,31 @@ async function handleAxionCommand(chatId, codename) {
   try {
     const [devices, maintainers, supportGroups] = await fetchDevicesData();
     
-    // Check if device exists in official list
-    if (!devices[codename]) {
-      // Try to find similar codenames for suggestion
+    // First attempt: direct lookup (for backward compatibility)
+    let foundCodename = devices[codename] ? codename : null;
+    
+    // Second attempt: case-insensitive lookup if direct lookup failed
+    if (!foundCodename) {
+      const lowercaseInput = codename.toLowerCase();
+      
+      // Find the first matching codename (case-insensitive)
+      for (const deviceCodename in devices) {
+        if (deviceCodename.toLowerCase() === lowercaseInput) {
+          foundCodename = deviceCodename;
+          break;
+        }
+      }
+    }
+    
+    // If still not found, try partial matching for suggestions
+    if (!foundCodename) {
+      // Try to find similar codenames for suggestion (case-insensitive)
+      const lowercaseInput = codename.toLowerCase();
       const similarCodenames = Object.keys(devices)
-        .filter(device => device.includes(codename) || codename.includes(device))
+        .filter(device => 
+          device.toLowerCase().includes(lowercaseInput) || 
+          lowercaseInput.includes(device.toLowerCase())
+        )
         .slice(0, 3);
       
       let message = `Device "${codename}" not found in official devices list.`;
@@ -219,34 +239,35 @@ async function handleAxionCommand(chatId, codename) {
       return sendMessage(chatId, message);
     }
     
+    // At this point, foundCodename contains the correctly cased codename
     const [vanillaData, gmsData] = await Promise.all([
-      fetchBuildData(codename, 'VANILLA'),
-      fetchBuildData(codename, 'GMS')
+      fetchBuildData(foundCodename, 'VANILLA'),
+      fetchBuildData(foundCodename, 'GMS')
     ]);
 
     if (!vanillaData && !gmsData) {
-      addLog(`No builds found for ${codename}`);
-      return sendMessage(chatId, `No builds found for ${codename}!`);
+      addLog(`No builds found for ${foundCodename}`);
+      return sendMessage(chatId, `No builds found for ${foundCodename}!`);
     }
 
-    const deviceName = devices[codename];
-    const maintainer = maintainers[codename] || 'Not specified';
+    const deviceName = devices[foundCodename];
+    const maintainer = maintainers[foundCodename] || 'Not specified';
     const keyboard = [];
     
-    let message = `📱 *${deviceName}* (${codename})\n`;
+    let message = `📱 *${deviceName}* (${foundCodename})\n`;
     if (maintainer) message += `👤 Maintainer: ${maintainer}\n\n`;
     message += "*Available builds:*\n";
 
     if (vanillaData) {
-      keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${codename}` }]);
+      keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${foundCodename}` }]);
       message += `\n• Vanilla: ${vanillaData.version}`;
     }
     if (gmsData) {
-      keyboard.push([{ text: "GMS", callback_data: `gms_${codename}` }]);
+      keyboard.push([{ text: "GMS", callback_data: `gms_${foundCodename}` }]);
       message += `\n• GMS: ${gmsData.version}`;
     }
 
-    addLog(`Sending build info for ${codename} (${deviceName}) to ${chatId}`);
+    addLog(`Sending build info for ${foundCodename} (${deviceName}) to ${chatId}`);
     return sendMessage(chatId, message, {
       reply_markup: { inline_keyboard: keyboard },
       parse_mode: 'Markdown'
