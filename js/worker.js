@@ -192,70 +192,7 @@ async function sendHelp(chatId) {
   );
 }
 
-async function handleAxionCommand(chatId, codename) {
-  if (!codename) {
-    addLog(`Axion command used without codename by ${chatId}`);
-    return sendMessage(chatId, "Please provide a device codename!\nExample: /axion pipa");
-  }
 
-  addLog(`Checking builds for ${codename} requested by ${chatId}`);
-  
-  try {
-    const [devices, maintainers, supportGroups] = await fetchDevicesData();
-    
-    // Check if device exists in official list
-    if (!devices[codename]) {
-      // Try to find similar codenames for suggestion
-      const similarCodenames = Object.keys(devices)
-        .filter(device => device.includes(codename) || codename.includes(device))
-        .slice(0, 3);
-      
-      let message = `Device "${codename}" not found in official devices list.`;
-      if (similarCodenames.length > 0) {
-        message += `\n\nDid you mean:\n${similarCodenames.map(c => `• ${c} (${devices[c]})`).join('\n')}`;
-      }
-      
-      addLog(`Device ${codename} not found, suggesting ${similarCodenames.join(', ')}`);
-      return sendMessage(chatId, message);
-    }
-    
-    const [vanillaData, gmsData] = await Promise.all([
-      fetchBuildData(codename, 'VANILLA'),
-      fetchBuildData(codename, 'GMS')
-    ]);
-
-    if (!vanillaData && !gmsData) {
-      addLog(`No builds found for ${codename}`);
-      return sendMessage(chatId, `No builds found for ${codename}!`);
-    }
-
-    const deviceName = devices[codename];
-    const maintainer = maintainers[codename] || 'Not specified';
-    const keyboard = [];
-    
-    let message = `📱 *${deviceName}* (${codename})\n`;
-    if (maintainer) message += `👤 Maintainer: ${maintainer}\n\n`;
-    message += "*Available builds:*\n";
-
-    if (vanillaData) {
-      keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${codename}` }]);
-      message += `\n• Vanilla: ${vanillaData.version}`;
-    }
-    if (gmsData) {
-      keyboard.push([{ text: "GMS", callback_data: `gms_${codename}` }]);
-      message += `\n• GMS: ${gmsData.version}`;
-    }
-
-    addLog(`Sending build info for ${codename} (${deviceName}) to ${chatId}`);
-    return sendMessage(chatId, message, {
-      reply_markup: { inline_keyboard: keyboard },
-      parse_mode: 'Markdown'
-    });
-  } catch (error) {
-    addLog(`Error in axion command: ${error}`);
-    return sendMessage(chatId, "Failed to fetch build information. Please try again later.");
-  }
-}
 
 async function handleDevicesCommand(chatId) {
   addLog(`Devices command requested by ${chatId}`);
