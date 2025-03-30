@@ -1,6 +1,6 @@
 const TELEGRAM_TOKEN = 'TG_BOT_TOKEN';
 const API_BASE = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
-const DEVICES_URL = 'https://raw.githubusercontent.com/rmuxnet/buildfetch.bot/refs/heads/main/info/devices.json';
+const DEVICES_URL = 'https://raw.githubusercontent.com/AxionAOSP/official_devices/refs/heads/main/dinfo.json';
 const BUILD_DATA_URL = 'https://raw.githubusercontent.com/AxionAOSP/official_devices/main/OTA';
 const CACHE_TTL = 60; // Cache for 1 min
 
@@ -464,28 +464,37 @@ async function fetchDevicesData() {
     }
     
     // Parse JSON data
-    const devicesData = await response.json();
-
+    const data = await response.json();
+    
     // Create devices, maintainers and support groups maps
     const devices = {};
     const maintainers = {};
     const supportGroups = {};
     
+    // The new JSON format has a 'devices' array instead of key-value pairs
+    if (!data.devices || !Array.isArray(data.devices)) {
+      throw new Error('Invalid device data format');
+    }
+    
     // Iterate through each device entry in the JSON
-    for (const [codename, info] of Object.entries(devicesData)) {
-      // Store device name with codename as key
-      devices[codename] = info.device_name;
-      
-      // Store maintainer info with codename as key
-      maintainers[codename] = info.maintainer;
-      
-      // Store support group with codename as key (if available)
-      if (info.support_group) {
-        supportGroups[codename] = info.support_group;
+    for (const device of data.devices) {
+      if (device.codename && device.device) {
+        // Store device name with codename as key
+        devices[device.codename] = device.device;
+        
+        // Store maintainer info with codename as key
+        if (device.maintainer) {
+          maintainers[device.codename] = device.maintainer;
+        }
+        
+        // Store support group with codename as key (if available)
+        if (device.support_group) {
+          supportGroups[device.codename] = device.support_group;
+        }
+        
+        // Log each device and its codename
+        addLog(`${device.codename}: ${device.device}`);
       }
-      
-      // Log each device and its codename
-      addLog(`${codename}: ${info.device_name}`);
     }
 
     addLog(`Loaded ${Object.keys(devices).length} devices from repository`);
