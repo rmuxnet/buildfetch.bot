@@ -1,6 +1,6 @@
-const TELEGRAM_TOKEN = 'TG_BOT_TOKEN';
+const TELEGRAM_TOKEN = 'BOTTOKEN';
 const API_BASE = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
-const DEVICES_URL = 'https://raw.githubusercontent.com/AxionAOSP/official_devices/refs/heads/main/dinfo.json';
+const DEVICES_URL = 'https://raw.githubusercontent.com/rmuxnet/AxionAOSP.github.io/refs/heads/main/devices.json';
 const BUILD_DATA_URL = 'https://raw.githubusercontent.com/AxionAOSP/official_devices/main/OTA';
 const CACHE_TTL = 60; // Cache for 1 min
 
@@ -8,6 +8,7 @@ const CACHE_TTL = 60; // Cache for 1 min
 let devicesCache = null;
 let maintainersCache = null;
 let supportGroupsCache = null;
+let imageUrlsCache = null;
 let devicesCacheTime = 0;
 let buildDataCache = {};
 let logMessages = []; // Store log messages
@@ -201,7 +202,7 @@ async function handleAxionCommand(chatId, codename) {
   addLog(`Checking builds for ${codename} requested by ${chatId}`);
   
   try {
-    const [devices, maintainers, supportGroups] = await fetchDevicesData();
+    const [devices, maintainers, supportGroups, imageUrls] = await fetchDevicesData();
     
     // First attempt: direct lookup (for backward compatibility)
     let foundCodename = devices[codename] ? codename : null;
@@ -398,7 +399,7 @@ async function handleBackButton(query, codename) {
 async function handleBuildDetails(query, variant, codename) {
   addLog(`Build details requested for ${codename} (${variant})`);
   try {
-    const [devices, maintainers, supportGroups] = await fetchDevicesData();
+    const [devices, maintainers, supportGroups, imageUrls] = await fetchDevicesData();
     const buildData = await fetchBuildData(codename, variant.toUpperCase());
     
     if (!buildData) {
@@ -448,8 +449,8 @@ async function handleBuildDetails(query, variant, codename) {
 async function fetchDevicesData() {
   // Check cache first
   const now = Date.now();
-  if (devicesCache && maintainersCache && supportGroupsCache && (now - devicesCacheTime < CACHE_TTL * 1000)) {
-    return [devicesCache, maintainersCache, supportGroupsCache];
+  if (devicesCache && maintainersCache && supportGroupsCache && imageUrlsCache && (now - devicesCacheTime < CACHE_TTL * 1000)) {
+    return [devicesCache, maintainersCache, supportGroupsCache, imageUrlsCache];
   }
   
   addLog("Fetching devices data from GitHub");
@@ -466,21 +467,22 @@ async function fetchDevicesData() {
     // Parse JSON data
     const data = await response.json();
     
-    // Create devices, maintainers and support groups maps
+    // Create devices, maintainers, support groups and image URLs maps
     const devices = {};
     const maintainers = {};
     const supportGroups = {};
+    const imageUrls = {};
     
-    // The new JSON format has a 'devices' array instead of key-value pairs
+    // The new JSON format has a 'devices' array
     if (!data.devices || !Array.isArray(data.devices)) {
       throw new Error('Invalid device data format');
     }
     
     // Iterate through each device entry in the JSON
     for (const device of data.devices) {
-      if (device.codename && device.device) {
+      if (device.codename && device.device_name) {
         // Store device name with codename as key
-        devices[device.codename] = device.device;
+        devices[device.codename] = device.device_name;
         
         // Store maintainer info with codename as key
         if (device.maintainer) {
@@ -492,8 +494,13 @@ async function fetchDevicesData() {
           supportGroups[device.codename] = device.support_group;
         }
         
+        // Store image URL with codename as key (if available)
+        if (device.image_url) {
+          imageUrls[device.codename] = device.image_url;
+        }
+        
         // Log each device and its codename
-        addLog(`${device.codename}: ${device.device}`);
+        addLog(`${device.codename}: ${device.device_name}`);
       }
     }
 
@@ -503,13 +510,14 @@ async function fetchDevicesData() {
     devicesCache = devices;
     maintainersCache = maintainers;
     supportGroupsCache = supportGroups;
+    imageUrlsCache = imageUrls;
     devicesCacheTime = now;
     
-    return [devices, maintainers, supportGroups];
+    return [devices, maintainers, supportGroups, imageUrls];
   } catch (error) {
     addLog(`Error fetching devices: ${error}`);
     // Return empty objects if fetch fails but don't update cache
-    return [{}, {}, {}];
+    return [{}, {}, {}, {}];
   }
 }
 
