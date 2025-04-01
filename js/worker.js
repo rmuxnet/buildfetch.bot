@@ -2,7 +2,7 @@ const TELEGRAM_TOKEN = 'BOTTOKEN';
 const API_BASE = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 const DEVICES_URL = 'https://raw.githubusercontent.com/rmuxnet/AxionAOSP.github.io/refs/heads/main/devices.json';
 const BUILD_DATA_URL = 'https://raw.githubusercontent.com/AxionAOSP/official_devices/main/OTA';
-const CACHE_TTL = 60; // Cache for 1 min
+const CACHE_TTL = 300; // Cache for 5 minutes reduces api calls n etc as i hate yall :)
 
 // In-memory cache
 let devicesCache = null;
