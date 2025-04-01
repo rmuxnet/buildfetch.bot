@@ -1,0 +1,34 @@
+const NEWS_FEED_URL = 'https://example.com/axion-news-rss';
+
+async function handleNewsCommand(chatId) {
+  try {
+    const response = await fetch(NEWS_FEED_URL);
+    const xmlData = await response.text();
+    const newsItems = parseRSSFeed(xmlData); // Implement an RSS feed parser
+
+    let message = "📰 *Latest Axion News:*\n\n";
+    newsItems.forEach(item => {
+      message += `• [${item.title}](${item.link})\n`;
+    });
+
+    return sendMessage(chatId, message, { parse_mode: 'Markdown', disable_web_page_preview: true });
+  } catch (error) {
+    addLog(`Error fetching news: ${error}`);
+    return sendMessage(chatId, "Failed to fetch news. Please try again later.");
+  }
+}
+
+function parseRSSFeed(xmlData) {
+  // Implement a simple RSS feed parser
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlData, "application/xml");
+  const items = xmlDoc.getElementsByTagName("item");
+  const newsItems = [];
+  for (let i = 0; i < items.length; i++) {
+    newsItems.push({
+      title: items[i].getElementsByTagName("title")[0].textContent,
+      link: items[i].getElementsByTagName("link")[0].textContent
+    });
+  }
+  return newsItems;
+}
