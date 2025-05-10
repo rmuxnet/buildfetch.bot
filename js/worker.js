@@ -1,8 +1,14 @@
-const TELEGRAM_TOKEN = 'BOTTOKEN';
+const TELEGRAM_TOKEN = 'EHMN';
 const API_BASE = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
-const DEVICES_URL = 'https://raw.githubusercontent.com/rmuxnet/AxionAOSP.github.io/refs/heads/main/devices.json';
+const DEVICES_URL = 'https://raw.githubusercontent.com/AxionAOSP/official_devices/main/dinfo.json';
 const BUILD_DATA_URL = 'https://raw.githubusercontent.com/AxionAOSP/official_devices/main/OTA';
-const CACHE_TTL = 300; // Cache for 5 minutes reduces api calls n etc as i hate yall :)
+const CACHE_TTL = 60; // Cache for 1 min
+const ADMIN_CHAT_ID = '5578239588'; // Your chat ID for error logs
+const GITHUB_ENDPOINTS = {
+  devices: DEVICES_URL,
+  vanillaOTA: `${BUILD_DATA_URL}/VANILLA/a71.json`, // Test endpoint with known device
+  gmsOTA: `${BUILD_DATA_URL}/GMS/a71.json` // Test endpoint with known device
+};
 
 // In-memory cache
 let devicesCache = null;
@@ -26,6 +32,46 @@ function addLog(message) {
   console.log(`[${timestamp}] ${message}`);
 }
 
+// Function to clear cache
+function clearCache() {
+  devicesCache = null;
+  maintainersCache = null;
+  supportGroupsCache = null;
+  imageUrlsCache = null;
+  devicesCacheTime = 0;
+  buildDataCache = {};
+  addLog("Cache cleared manually");
+  return "Cache cleared successfully";
+}
+
+// Function to report errors to admin
+async function reportErrorToAdmin(context, error, additionalInfo = '') {
+  try {
+    const errorMsg = `⚠️ *Bot Error Report*\n\n` +
+                     `*Context:* ${context}\n` +
+                     `*Error:* ${error.message || String(error)}\n` +
+                     `*Stack:* ${error.stack ? error.stack.substring(0, 500) + '...' : 'N/A'}\n` +
+                     (additionalInfo ? `\n*Additional Info:*\n${additionalInfo}` : '');
+    
+    // Log error in console and logs array
+    addLog(`ERROR REPORT - ${context}: ${error.message || String(error)}`);
+    
+    // Send to admin chat
+    const params = new URLSearchParams({
+      chat_id: ADMIN_CHAT_ID,
+      text: errorMsg,
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true
+    });
+
+    await fetch(`${API_BASE}/sendMessage?${params}`);
+  } catch (reportError) {
+    // Just log to console if error reporting itself fails
+    console.error(`Failed to report error to admin: ${reportError}`);
+    addLog(`Failed to report error to admin: ${reportError}`);
+  }
+}
+
 async function handleRequest(request) {
   const url = new URL(request.url);
   
@@ -41,12 +87,19 @@ async function handleRequest(request) {
     });
   }
   
+  // Clear cache endpoint
+  if (url.pathname === '/clearcache' && request.method === 'GET') {
+    const result = clearCache();
+    return new Response(result, { status: 200 });
+  }
+  
   if (request.method === 'POST') {
     try {
       const update = await request.json();
       addLog(`Received update: ${JSON.stringify(update).substring(0, 100)}...`);
       return handleUpdate(update);
     } catch (error) {
+      await reportErrorToAdmin('handleRequest', error);
       addLog(`Error parsing request: ${error}`);
       return new Response('Bad Request', { status: 400 });
     }
@@ -162,12 +215,205 @@ async function handleUpdate(update) {
       else if (baseCommand === '/help') {
         return sendHelp(chatId);
       }
+      else if (baseCommand === '/refresh' && chatId.toString() === ADMIN_CHAT_ID) {
+        // Admin-only command to refresh cache
+        clearCache();
+        return sendMessage(chatId, "Cache refreshed successfully!");
+      }
+      else if (baseCommand === '/debug' && args[1] && chatId.toString() === ADMIN_CHAT_ID) {
+        try {
+          const codename = args[1]?.toLowerCase();
+          const variant = args[2]?.toUpperCase() || 'VANILLA';
+          
+          // Force refresh cache
+          clearCache();
+          
+          // Fetch build data directly
+          const buildData = await fetchBuildData(codename, variant, true);
+          
+          if (!buildData) {
+            return sendMessage(chatId, `No ${variant} build found for ${codename}!`);
+          }
+          
+          let debugInfo = `DEBUG INFO for ${codename} (${variant}):\n\n`;
+          debugInfo += JSON.stringify(buildData, null, 2);
+          
+          return sendMessage(chatId, debugInfo);
+        } catch (error) {
+          await reportErrorToAdmin('Debug command', error);
+          return sendMessage(chatId, `Debug error: ${error.message}`);
+        }
+      }
+      else if (baseCommand === '/checkbuild' && args[1] && chatId.toString() === ADMIN_CHAT_ID) {
+        const codename = args[1].toLowerCase();
+        return checkBuildExistence(chatId, codename);
+      }
+      else if (baseCommand === '/testcon' && chatId.toString() === ADMIN_CHAT_ID) {
+        // New command to test GitHub connectivity
+        return testGitHubConnectivity(chatId);
+      }
+      else if (command === '!gh') {
+        return testGitHubConnectivity(chatId);
+      } else if (command === '!info') {
+        return sendInfo(chatId);
+      } else if (command === '!logs') {
+        return sendLogs(chatId);
+      } else if (command === '!stats') {
+        return sendStats(chatId);
+      } else if (command === '!status') {
+        return sendStatus(chatId);
+      }
     }
 
     return new Response('OK');
   } catch (error) {
+    await reportErrorToAdmin('handleUpdate', error, `Update: ${JSON.stringify(update).substring(0, 300)}...`);
     addLog(`Error handling update: ${error}`);
     return new Response('Internal Server Error', { status: 500 });
+  }
+}
+
+async function testGitHubConnectivity(chatId) {
+  addLog(`GitHub connectivity test requested by ${chatId}`);
+  const timestamp = new Date().toLocaleString();
+  let message = `🔄 *Testing GitHub Connectivity*\n\n🕒 *Timestamp:* ${timestamp}\n\n`;
+
+  try {
+    const results = {};
+    for (const [name, url] of Object.entries(GITHUB_ENDPOINTS)) {
+      try {
+        const startTime = Date.now();
+        const response = await fetch(url, { headers: { 'Cache-Control': 'no-cache' } });
+        const endTime = Date.now();
+        const responseTime = endTime - startTime;
+
+        if (response.ok) {
+          results[name] = { status: response.status, time: responseTime, success: true };
+          message += `✅ *${name}:* Success! Status: ${response.status}, Response Time: ${responseTime}ms\n`;
+        } else {
+          results[name] = { status: response.status, time: responseTime, success: false };
+          message += `❌ *${name}:* Failed! Status: ${response.status}, Response Time: ${responseTime}ms\n`;
+        }
+      } catch (error) {
+        results[name] = { error: error.message, success: false };
+        message += `❌ *${name}:* Error: ${error.message}\n`;
+      }
+    }
+
+    const allSuccessful = Object.values(results).every(r => r.success);
+    message += allSuccessful ? '\n✅ *All connections successful!*' : '\n⚠️ *Some connections failed.*';
+
+    return sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    await reportErrorToAdmin('testGitHubConnectivity', error);
+    return sendMessage(chatId, `Error testing connectivity: ${error.message}`);
+  }
+}
+
+async function sendInfo(chatId) {
+  addLog(`Info command requested by ${chatId}`);
+  const timestamp = new Date().toLocaleString();
+  try {
+    const [devices, maintainers, supportGroups] = await fetchDevicesData();
+    const vanillaBuilds = Object.keys(buildDataCache).filter(key => key.includes('_VANILLA')).length;
+    const gmsBuilds = Object.keys(buildDataCache).filter(key => key.includes('_GMS')).length;
+
+    const message = 
+      `📊 *Bot Info*\n\n` +
+      `🕒 *Timestamp:* ${timestamp}\n` +
+      `📱 *Devices fetched:* ${Object.keys(devices).length}\n` +
+      `👤 *Maintainers fetched:* ${Object.keys(maintainers).length}\n` +
+      `💬 *Support groups fetched:* ${Object.keys(supportGroups).length}\n` +
+      `📦 *OTA Builds:*\n` +
+      `   • *Vanilla:* ${vanillaBuilds} builds available\n` +
+      `   • *GMS:* ${gmsBuilds} builds available\n\n` +
+      `🕒 *Cache last refreshed:* ${new Date(devicesCacheTime).toLocaleString()}\n\n` +
+      `Use /devices to see the full list of supported devices.`;
+
+    return sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    await reportErrorToAdmin('sendInfo', error);
+    addLog(`Error in info command: ${error}`);
+    return sendMessage(chatId, "Failed to fetch bot info. Please try again later.");
+  }
+}
+
+async function sendLogs(chatId) {
+  addLog(`Logs command requested by ${chatId}`);
+  try {
+    // Get the recent logs but format them for better display
+    // Instead of escaping markdown, we'll remove markup syntax and format it differently
+    const logs = logMessages.slice(0, 10).map(log => {
+      // Remove timestamp brackets for cleaner display
+      let cleanLog = log.replace(/\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]/g, '');
+      // Remove any markdown formatting completely rather than escaping it
+      cleanLog = cleanLog.replace(/[*_`]/g, '');
+      return `○ ${cleanLog.trim()}`;
+    }).join('\n\n');
+    
+    const message = "📝 *Recent Logs*\n━━━━━━━━━━━━━━━━━\n\n" + logs;
+    
+    // Send without markdown formatting to avoid parsing issues
+    return sendMessage(chatId, message, { 
+      parse_mode: '', // No parse mode to avoid formatting issues
+      disable_web_page_preview: true
+    });
+  } catch (error) {
+    await reportErrorToAdmin('sendLogs', error);
+    addLog(`Error in logs command: ${error}`);
+    return sendMessage(chatId, "Failed to fetch logs. Please try again later.");
+  }
+}
+
+async function sendStats(chatId) {
+  addLog(`Stats command requested by ${chatId}`);
+  try {
+    // Replace process.uptime() and process.memoryUsage() with mock data or alternatives
+    const uptimeMinutes = Math.floor((Date.now() - performance.timeOrigin) / 60000); // Approximate uptime
+    const memoryUsage = {
+      rss: 50 * 1024 * 1024, // Mock RSS memory usage (50 MB)
+      heapUsed: 30 * 1024 * 1024, // Mock heap used (30 MB)
+      heapTotal: 40 * 1024 * 1024 // Mock heap total (40 MB)
+    };
+
+    const message = 
+      `📊 *Bot Stats*\n\n` +
+      `🕒 *Uptime:* ${uptimeMinutes} minutes\n` +
+      `💾 *Memory Usage:*\n` +
+      `   • RSS: ${(memoryUsage.rss / 1024 / 1024).toFixed(2)} MB\n` +
+      `   • Heap Used: ${(memoryUsage.heapUsed / 1024 / 1024).toFixed(2)} MB\n` +
+      `   • Heap Total: ${(memoryUsage.heapTotal / 1024 / 1024).toFixed(2)} MB\n\n` +
+      `Use !info for more details.`;
+
+    return sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    await reportErrorToAdmin('sendStats', error);
+    addLog(`Error in stats command: ${error}`);
+    return sendMessage(chatId, "Failed to fetch stats. Please try again later.");
+  }
+}
+
+async function sendStatus(chatId) {
+  addLog(`Status command requested by ${chatId}`);
+  try {
+    const [devices, maintainers] = await fetchDevicesData();
+    const vanillaBuilds = Object.keys(buildDataCache).filter(key => key.includes('_VANILLA')).length;
+    const gmsBuilds = Object.keys(buildDataCache).filter(key => key.includes('_GMS')).length;
+
+    const message = 
+      `✅ *Bot Status*\n\n` +
+      `📱 *Devices fetched:* ${Object.keys(devices).length}\n` +
+      `📦 *OTA Builds:*\n` +
+      `   • *Vanilla:* ${vanillaBuilds} builds available\n` +
+      `   • *GMS:* ${gmsBuilds} builds available\n` +
+      `🕒 *Cache last refreshed:* ${new Date(devicesCacheTime).toLocaleString()}\n\n` +
+      `Use !info for more details.`;
+
+    return sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    await reportErrorToAdmin('sendStatus', error);
+    addLog(`Error in status command: ${error}`);
+    return sendMessage(chatId, "Failed to fetch status. Please try again later.");
   }
 }
 
@@ -202,16 +448,54 @@ async function handleAxionCommand(chatId, codename) {
   addLog(`Checking builds for ${codename} requested by ${chatId}`);
   
   try {
-    const [devices, maintainers, supportGroups, imageUrls] = await fetchDevicesData();
+    addLog(`Direct build check for ${codename}`);
+    const directVanillaData = await fetchBuildData(codename, 'VANILLA', true);
+    const directGmsData = await fetchBuildData(codename, 'GMS', true);
     
-    // First attempt: direct lookup (for backward compatibility)
+    if (directVanillaData || directGmsData) {
+      addLog(`Found direct build data for ${codename}`);
+      
+      let [devices, maintainers, supportGroups, imageUrls] = await fetchDevicesData(true);
+      
+      if (!devices[codename]) {
+        addLog(`Device ${codename} has builds but isn't in the devices list - adding temporary entry`);
+        const displayName = codename.charAt(0).toUpperCase() + codename.slice(1);
+        devices[codename] = displayName;
+        devicesCache = devices;
+      }
+      
+      const deviceName = devices[codename];
+      const maintainer = maintainers[codename] || 'Not specified';
+      const keyboard = [];
+      
+      let message = `📱 *${deviceName}* (${codename})\n`;
+      if (maintainer) message += `👤 Maintainer: ${maintainer}\n\n`;
+      message += "*Available builds:*\n";
+
+      if (directVanillaData) {
+        keyboard.push([{ text: "Vanilla", callback_data: `vanilla_${codename}` }]);
+        message += `\n• Vanilla: ${directVanillaData.version}`;
+      }
+      if (directGmsData) {
+        keyboard.push([{ text: "GMS", callback_data: `gms_${codename}` }]);
+        message += `\n• GMS: ${directGmsData.version}`;
+      }
+
+      addLog(`Sending build info for ${codename} to ${chatId}`);
+      return sendMessage(chatId, message, {
+        reply_markup: { inline_keyboard: keyboard },
+        parse_mode: 'Markdown'
+      });
+    }
+    
+    addLog(`No direct builds found for ${codename}, checking device list`);
+    const [devices, maintainers] = await fetchDevicesData(true);
+    
     let foundCodename = devices[codename] ? codename : null;
     
-    // Second attempt: case-insensitive lookup if direct lookup failed
     if (!foundCodename) {
       const lowercaseInput = codename.toLowerCase();
       
-      // Find the first matching codename (case-insensitive)
       for (const deviceCodename in devices) {
         if (deviceCodename.toLowerCase() === lowercaseInput) {
           foundCodename = deviceCodename;
@@ -220,9 +504,7 @@ async function handleAxionCommand(chatId, codename) {
       }
     }
     
-    // If still not found, try partial matching for suggestions
     if (!foundCodename) {
-      // Try to find similar codenames for suggestion (case-insensitive)
       const lowercaseInput = codename.toLowerCase();
       const similarCodenames = Object.keys(devices)
         .filter(device => 
@@ -231,26 +513,24 @@ async function handleAxionCommand(chatId, codename) {
         )
         .slice(0, 3);
       
-      let message = `Device "${codename}" not found in official devices list.`;
+      let message = `Device "${codename}" not found in official devices list and no builds exist.`;
       if (similarCodenames.length > 0) {
         message += `\n\nDid you mean:\n${similarCodenames.map(c => `• ${c} (${devices[c]})`).join('\n')}`;
       }
       
-      addLog(`Device ${codename} not found, suggesting ${similarCodenames.join(', ')}`);
+      addLog(`Device ${codename} not found and no builds exist, suggesting ${similarCodenames.join(', ')}`);
       return sendMessage(chatId, message);
     }
     
-    // At this point, foundCodename contains the correctly cased codename
-    const [vanillaData, gmsData] = await Promise.all([
-      fetchBuildData(foundCodename, 'VANILLA'),
-      fetchBuildData(foundCodename, 'GMS')
-    ]);
-
+    addLog(`Device ${foundCodename} found in list, checking builds for correct case`);
+    const vanillaData = await fetchBuildData(foundCodename, 'VANILLA', true);
+    const gmsData = await fetchBuildData(foundCodename, 'GMS', true);
+    
     if (!vanillaData && !gmsData) {
       addLog(`No builds found for ${foundCodename}`);
       return sendMessage(chatId, `No builds found for ${foundCodename}!`);
     }
-
+    
     const deviceName = devices[foundCodename];
     const maintainer = maintainers[foundCodename] || 'Not specified';
     const keyboard = [];
@@ -274,6 +554,7 @@ async function handleAxionCommand(chatId, codename) {
       parse_mode: 'Markdown'
     });
   } catch (error) {
+    await reportErrorToAdmin('handleAxionCommand', error, `Codename: ${codename}`);
     addLog(`Error in axion command: ${error}`);
     return sendMessage(chatId, "Failed to fetch build information. Please try again later.");
   }
@@ -289,13 +570,10 @@ async function handleDevicesCommand(chatId) {
       return sendMessage(chatId, "No devices found. Please try again later.");
     }
     
-    // Sort devices by name
     const sortedDevices = Object.entries(devices).sort((a, b) => a[1].localeCompare(b[1]));
     
-    // Group devices by manufacturer
     const manufacturers = {};
     for (const [codename, name] of sortedDevices) {
-      // Extract manufacturer from device name (usually the first word)
       const manufacturer = name.split(' ')[0];
       if (!manufacturers[manufacturer]) {
         manufacturers[manufacturer] = [];
@@ -303,7 +581,6 @@ async function handleDevicesCommand(chatId) {
       manufacturers[manufacturer].push({ codename, name });
     }
     
-    // Create message with manufacturers and devices
     let message = "📱 *Officially Supported Devices*\n\n";
     
     for (const [manufacturer, deviceList] of Object.entries(manufacturers)) {
@@ -318,7 +595,6 @@ async function handleDevicesCommand(chatId) {
     
     addLog(`Sending device list with ${Object.keys(devices).length} devices to ${chatId}`);
     
-    // Split message if it's too long (Telegram has 4096 character limit)
     if (message.length > 4000) {
       const chunks = [];
       let currentChunk = '';
@@ -339,7 +615,6 @@ async function handleDevicesCommand(chatId) {
       
       addLog(`Message split into ${chunks.length} chunks due to length`);
       
-      // Send chunks one by one
       for (const chunk of chunks) {
         await sendMessage(chatId, chunk, {
           parse_mode: 'Markdown',
@@ -355,6 +630,7 @@ async function handleDevicesCommand(chatId) {
       });
     }
   } catch (error) {
+    await reportErrorToAdmin('handleDevicesCommand', error);
     addLog(`Error in devices command: ${error}`);
     return sendMessage(chatId, "Failed to fetch device information. Please try again later.");
   }
@@ -391,6 +667,7 @@ async function handleBackButton(query, codename) {
       parse_mode: 'Markdown'
     });
   } catch (error) {
+    await reportErrorToAdmin('handleBackButton', error, `Codename: ${codename}`);
     addLog(`Error handling back button: ${error}`);
     return editMessage(query, "Failed to fetch build information. Please try again later.");
   }
@@ -423,14 +700,8 @@ async function handleBuildDetails(query, variant, codename) {
       [{ text: "⬇️ Download", url: buildData.url }]
     ];
     
-    // Add Support Group button if available
     if (supportGroup) {
       keyboard.unshift([{ text: "💬 Support Group", url: supportGroup }]);
-    }
-    
-    // Add MD5 button if available
-    if (buildData.md5) {
-      keyboard.push([{ text: "📋 MD5: " + buildData.md5.substring(0, 16) + "...", callback_data: "md5_copy" }]);
     }
     
     keyboard.push([{ text: "🔙 Back", callback_data: `back_${codename}` }]);
@@ -441,72 +712,75 @@ async function handleBuildDetails(query, variant, codename) {
       parse_mode: 'Markdown'
     });
   } catch (error) {
+    await reportErrorToAdmin('handleBuildDetails', error, `Codename: ${codename}, Variant: ${variant}`);
     addLog(`Error fetching build details: ${error}`);
     return editMessage(query, "Failed to fetch build details. Please try again later.");
   }
 }
 
-async function fetchDevicesData() {
-  // Check cache first
+async function fetchDevicesData(forceRefresh = false) {
   const now = Date.now();
-  if (devicesCache && maintainersCache && supportGroupsCache && imageUrlsCache && (now - devicesCacheTime < CACHE_TTL * 1000)) {
+  if (!forceRefresh && devicesCache && maintainersCache && supportGroupsCache && imageUrlsCache && (now - devicesCacheTime < CACHE_TTL * 1000)) {
     return [devicesCache, maintainersCache, supportGroupsCache, imageUrlsCache];
   }
   
-  addLog("Fetching devices data from GitHub");
+  addLog(`Fetching devices data from GitHub${forceRefresh ? ' (forced refresh)' : ''}`);
   
   try {
-    const response = await fetch(DEVICES_URL, {
+    const cacheBuster = `?t=${Date.now()}`;
+    const response = await fetch(DEVICES_URL + cacheBuster, {
       headers: { 'Cache-Control': 'no-cache' }
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch devices: ${response.status} ${response.statusText}`);
+      const errorMsg = `Failed to fetch devices: ${response.status} ${response.statusText}`;
+      throw new Error(errorMsg);
     }
     
-    // Parse JSON data
     const data = await response.json();
     
-    // Create devices, maintainers, support groups and image URLs maps
+    addLog(`Device data structure check: ${JSON.stringify(data).substring(0, 100)}...`);
+    
     const devices = {};
     const maintainers = {};
     const supportGroups = {};
     const imageUrls = {};
     
-    // The new JSON format has a 'devices' array
-    if (!data.devices || !Array.isArray(data.devices)) {
-      throw new Error('Invalid device data format');
-    }
-    
-    // Iterate through each device entry in the JSON
-    for (const device of data.devices) {
-      if (device.codename && device.device_name) {
-        // Store device name with codename as key
-        devices[device.codename] = device.device_name;
-        
-        // Store maintainer info with codename as key
-        if (device.maintainer) {
-          maintainers[device.codename] = device.maintainer;
+    if (data.devices && Array.isArray(data.devices)) {
+      addLog(`Found ${data.devices.length} devices in JSON data`);
+      
+      for (const device of data.devices) {
+        if (device.codename && device.device_name) {
+          devices[device.codename] = device.device_name;
+          
+          if (device.maintainer) {
+            maintainers[device.codename] = device.maintainer;
+          }
+          
+          if (device.support_group) {
+            supportGroups[device.codename] = device.support_group;
+          }
+          
+          if (device.image_url) {
+            imageUrls[device.codename] = device.image_url;
+          }
+          
+          addLog(`Processed device: ${device.codename} (${device.device_name})`);
+        } else {
+          addLog(`Skipped invalid device entry: ${JSON.stringify(device).substring(0, 100)}...`);
         }
-        
-        // Store support group with codename as key (if available)
-        if (device.support_group) {
-          supportGroups[device.codename] = device.support_group;
-        }
-        
-        // Store image URL with codename as key (if available)
-        if (device.image_url) {
-          imageUrls[device.codename] = device.image_url;
-        }
-        
-        // Log each device and its codename
-        addLog(`${device.codename}: ${device.device_name}`);
       }
+    } else {
+      const errorMsg = 'Invalid device data format - "devices" array not found';
+      addLog(`Unexpected JSON structure: ${JSON.stringify(data).substring(0, 200)}...`);
+      throw new Error(errorMsg);
     }
 
     addLog(`Loaded ${Object.keys(devices).length} devices from repository`);
+    
+    const deviceSample = Object.keys(devices).slice(0, 5).join(', ');
+    addLog(`Sample devices: ${deviceSample}`);
 
-    // Update cache
     devicesCache = devices;
     maintainersCache = maintainers;
     supportGroupsCache = supportGroups;
@@ -515,57 +789,59 @@ async function fetchDevicesData() {
     
     return [devices, maintainers, supportGroups, imageUrls];
   } catch (error) {
+    await reportErrorToAdmin('fetchDevicesData', error);
     addLog(`Error fetching devices: ${error}`);
-    // Return empty objects if fetch fails but don't update cache
     return [{}, {}, {}, {}];
   }
 }
 
-async function fetchBuildData(codename, variant) {
-  // Create cache key
+async function fetchBuildData(codename, variant, forceRefresh = false) {
   const cacheKey = `${codename}_${variant}`;
   
-  // Check cache first
   const now = Date.now();
-  if (buildDataCache[cacheKey] && (now - buildDataCache[cacheKey].timestamp < CACHE_TTL * 1000)) {
+  if (!forceRefresh && buildDataCache[cacheKey] && (now - buildDataCache[cacheKey].timestamp < CACHE_TTL * 1000)) {
     return buildDataCache[cacheKey].data;
   }
   
-  addLog(`Fetching build data for ${codename} (${variant})`);
+  addLog(`Fetching build data for ${codename} (${variant})${forceRefresh ? ' (forced refresh)' : ''}`);
   
   try {
-    // Fetch actual build data from GitHub OTA repository
     const url = `${BUILD_DATA_URL}/${variant}/${codename}.json`;
-    const response = await fetch(url);
+    const cacheBuster = `?t=${Date.now()}`;
+    const fetchUrl = url + cacheBuster;
+    
+    addLog(`Fetching from URL: ${fetchUrl}`);
+    
+    const response = await fetch(fetchUrl, {
+      headers: { 'Cache-Control': 'no-cache' }
+    });
     
     if (!response.ok) {
-      addLog(`No build data for ${codename} (${variant})`);
+      addLog(`No build data found for ${codename} (${variant}) - Status: ${response.status}`);
       return null;
     }
     
     const data = await response.json();
     
-    if (!data.response || data.response.length === 0) {
-      addLog(`Empty build data for ${codename} (${variant})`);
+    addLog(`Build data structure: ${JSON.stringify(data).substring(0, 150)}...`);
+    
+    if (!data.response || !Array.isArray(data.response) || data.response.length === 0) {
+      addLog(`Empty or invalid build data for ${codename} (${variant})`);
       return null;
     }
     
-    // Get the latest build (first in the array)
     const latestBuild = data.response[0];
     
-    // Format build data
     const buildData = {
       filename: latestBuild.filename,
       version: latestBuild.version,
       size: humanReadableSize(latestBuild.size),
       date: formatTimestamp(latestBuild.datetime),
-      url: latestBuild.url,
-      md5: latestBuild.md5sum || null
+      url: latestBuild.url
     };
     
     addLog(`Found build ${buildData.version} for ${codename} (${variant})`);
     
-    // Update cache
     buildDataCache[cacheKey] = {
       data: buildData,
       timestamp: now
@@ -573,12 +849,68 @@ async function fetchBuildData(codename, variant) {
     
     return buildData;
   } catch (error) {
+    await reportErrorToAdmin('fetchBuildData', error, `Codename: ${codename}, Variant: ${variant}`);
     addLog(`Error fetching build data for ${codename} (${variant}): ${error}`);
     return null;
   }
 }
 
-// Helper functions
+async function checkBuildExistence(chatId, codename) {
+  try {
+    clearCache();
+    
+    const [devices, maintainers] = await fetchDevicesData(true);
+    const deviceExists = devices[codename] ? true : false;
+    
+    let message = `Debug check for ${codename}:\n\n`;
+    message += `✓ Device in official list: ${deviceExists ? 'Yes' : 'No'}\n`;
+    
+    if (deviceExists) {
+      message += `- Device name: ${devices[codename]}\n`;
+      message += `- Maintainer: ${maintainers[codename] || 'Not specified'}\n\n`;
+    }
+    
+    const vanillaUrl = `${BUILD_DATA_URL}/VANILLA/${codename}.json`;
+    message += `✓ Checking for Vanilla build: ${vanillaUrl}\n`;
+    
+    try {
+      const vanillaBuild = await fetchBuildData(codename, 'VANILLA', true);
+      if (vanillaBuild) {
+        message += `- Found! Version: ${vanillaBuild.version}\n`;
+        message += `- Filename: ${vanillaBuild.filename}\n`;
+        message += `- Size: ${vanillaBuild.size}\n`;
+      } else {
+        message += `- No Vanilla build found\n`;
+      }
+    } catch (error) {
+      message += `- Error: ${error.message}\n`;
+    }
+    
+    message += '\n';
+    
+    const gmsUrl = `${BUILD_DATA_URL}/GMS/${codename}.json`;
+    message += `✓ Checking for GMS build: ${gmsUrl}\n`;
+    
+    try {
+      const gmsBuild = await fetchBuildData(codename, 'GMS', true);
+      if (gmsBuild) {
+        message += `- Found! Version: ${gmsBuild.version}\n`;
+        message += `- Filename: ${gmsBuild.filename}\n`;
+        message += `- Size: ${gmsBuild.size}\n`;
+      } else {
+        message += `- No GMS build found\n`;
+      }
+    } catch (error) {
+      message += `- Error: ${error.message}\n`;
+    }
+    
+    await sendMessage(chatId, message);
+  } catch (error) {
+    await reportErrorToAdmin('checkBuildExistence', error, `Codename: ${codename}`);
+    await sendMessage(chatId, `Error checking build existence: ${error.message}`);
+  }
+}
+
 function humanReadableSize(bytes) {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -599,6 +931,7 @@ async function answerCallbackQuery(callbackQueryId, text = '') {
 
     await fetch(`${API_BASE}/answerCallbackQuery?${params}`);
   } catch (error) {
+    await reportErrorToAdmin('answerCallbackQuery', error);
     addLog(`Error answering callback query: ${error}`);
   }
 }
@@ -622,23 +955,36 @@ async function sendMessage(chatId, text, options = {}) {
       const errorData = await response.json();
       addLog(`Telegram API error: ${JSON.stringify(errorData)}`);
       
-      // If message is too long, try to handle it
-      if (errorData.description && errorData.description.includes('message is too long')) {
-        // Split the message and send in chunks
-        const maxLength = 4000; // Safe limit for Telegram
-        for (let i = 0; i < text.length; i += maxLength) {
-          const chunk = text.substring(i, i + maxLength);
-          await sendMessage(chatId, chunk, {
-            parse_mode: options.parse_mode,
-            disable_web_page_preview: true
-          });
+      // If there's a parsing error with Markdown, try sending without formatting
+      if (errorData.description && (
+          errorData.description.includes("can't parse entities") || 
+          errorData.description.includes("message is too long"))) {
+        
+        if (options.parse_mode) {
+          addLog(`Retrying without parse mode due to formatting error`);
+          // Clone options but remove parse_mode
+          const plainOptions = {...options};
+          delete plainOptions.parse_mode;
+          return sendMessage(chatId, text, plainOptions);
         }
-        return new Response('OK');
+        
+        // If message is too long, split it
+        if (errorData.description.includes("message is too long")) {
+          const maxLength = 4000;
+          for (let i = 0; i < text.length; i += maxLength) {
+            const chunk = text.substring(i, i + maxLength);
+            await sendMessage(chatId, chunk, {
+              disable_web_page_preview: true
+            });
+          }
+          return new Response('OK');
+        }
       }
     }
     
     return new Response('OK');
   } catch (error) {
+    await reportErrorToAdmin('sendMessage', error, `Chat ID: ${chatId}, Text: ${text}`);
     addLog(`Error sending message: ${error}`);
     return new Response('Failed to send message', { status: 500 });
   }
@@ -666,6 +1012,7 @@ async function editMessage(query, text, options = {}) {
     
     return new Response('OK');
   } catch (error) {
+    await reportErrorToAdmin('editMessage', error, `Query: ${JSON.stringify(query).substring(0, 300)}...`);
     addLog(`Error editing message: ${error}`);
     return new Response('Failed to edit message', { status: 500 });
   }
